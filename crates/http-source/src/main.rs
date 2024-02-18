@@ -14,12 +14,13 @@ use config::HttpConfig;
 use fluvio::{RecordKey, TopicProducer};
 use fluvio_connector_common::{
     connector,
-    tracing::{debug, info, trace, warn},
+    tracing::{debug, info, trace, warn, error},
     Source,
 };
+use futures::stream::LocalBoxStream;
 use url::Url;
 
-use crate::http_streaming_source::reconnect_stream_with_backoff;
+use crate::http_streaming_source::HttpStreamingSource;
 use source::HttpSource;
 use websocket_source::WebSocketSource;
 
@@ -36,14 +37,9 @@ async fn start(config: HttpConfig, producer: TopicProducer) -> Result<()> {
 
     loop {
         let mut stream = if url.scheme() == "ws" || url.scheme() == "wss" {
-            WebSocketSource::new(&config)?.connect(None).await?
+            with_backoff(&config, &mut backoff, WebSocketSource::new).await?
         } else if config.stream {
-            match reconnect_stream_with_backoff(&config, &mut backoff).await {
-                Ok(stream) => stream,
-                Err(_err) => {
-                    continue;
-                }
-            }
+            with_backoff(&config, &mut backoff, HttpStreamingSource::new).await?
         } else {
             HttpSource::new(&config)?.connect(None).await?
         };
@@ -56,8 +52,39 @@ async fn start(config: HttpConfig, producer: TopicProducer) -> Result<()> {
         }
 
         warn!("Disconnected from source endpoint, attempting reconnect...");
-        backoff = Backoff::new();
+        // backoff = Backoff::new();
     }
 
     Ok(())
+}
+
+async fn with_backoff<'a, F, C>(
+    config: &HttpConfig,
+    backoff: &mut Backoff,
+    c: F
+) -> Result<LocalBoxStream<'a, String>> 
+where
+    F: FnOnce(&HttpConfig) -> Result<C>,
+    C: Source<'a, String>
+{
+    let wait = backoff.next();
+
+    if wait > BACKOFF_LIMIT {
+        error!("Max retry reached, exiting");
+    }
+    
+    match c(&config)?.connect(None).await {
+        Ok(stream) => Ok(stream),
+        Err(err) => {
+            warn!(
+                "Error connecting to streaming source: \"{}\", reconnecting in {}.",
+                err,
+                humantime::format_duration(wait)
+            );
+
+            async_std::task::sleep(wait).await;
+
+            Err(err)
+        }
+    }
 }
