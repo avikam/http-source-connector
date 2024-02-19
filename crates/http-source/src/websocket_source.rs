@@ -144,12 +144,10 @@ impl WebSocketSource {
             PingInterval,
         }
 
+        let ws_stream_result = websocket_writer_and_stream(self.request.clone()).await?;
+
         let repeated_websocket = Box::pin(async_stream::stream! {
-            let ws_stream_result = websocket_writer_and_stream(self.request.clone()).await;
-            if ws_stream_result.is_err() {
-                return;
-            }
-            let (mut ping_only, ws_stream) = ws_stream_result.unwrap();
+            let (mut ping_only, ws_stream) = ws_stream_result;
 
             let mut ws_stream = ws_stream
                 .map(StreamElement::Read)
