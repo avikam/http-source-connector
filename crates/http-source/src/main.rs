@@ -66,7 +66,7 @@ async fn start(config: HttpConfig, producer: TopicProducer) -> Result<()> {
 async fn with_backoff<'a, F, C>(
     config: &HttpConfig,
     backoff: &mut Backoff,
-    c: F,
+    new: F,
 ) -> Result<LocalBoxStream<'a, String>>
 where
     F: FnOnce(&HttpConfig) -> Result<C>,
@@ -78,7 +78,7 @@ where
         error!("Max retry reached, exiting");
     }
 
-    match c(config)?.connect(None).await {
+    match new(config)?.connect(None).await {
         Ok(stream) => Ok(stream),
         Err(err) => {
             warn!(
