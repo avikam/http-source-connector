@@ -36,12 +36,17 @@ async fn start(config: HttpConfig, producer: TopicProducer) -> Result<()> {
     let mut backoff = Backoff::new();
 
     loop {
-        let mut stream = if url.scheme() == "ws" || url.scheme() == "wss" {
-            with_backoff(&config, &mut backoff, WebSocketSource::new).await?
+        let stream = if url.scheme() == "ws" || url.scheme() == "wss" {
+            with_backoff(&config, &mut backoff, WebSocketSource::new).await
         } else if config.stream {
-            with_backoff(&config, &mut backoff, HttpStreamingSource::new).await?
+            with_backoff(&config, &mut backoff, HttpStreamingSource::new).await
         } else {
-            HttpSource::new(&config)?.connect(None).await?
+            with_backoff(&config, &mut backoff, HttpSource::new).await
+        };
+
+        let mut stream = match stream {
+            Ok(stream) => stream,
+            Err(_) => continue
         };
 
         info!("Connected to source endpoint! Starting {SIGNATURES}");
@@ -52,7 +57,7 @@ async fn start(config: HttpConfig, producer: TopicProducer) -> Result<()> {
         }
 
         warn!("Disconnected from source endpoint, attempting reconnect...");
-        // backoff = Backoff::new();
+        backoff = Backoff::new();
     }
 
     Ok(())
@@ -73,7 +78,7 @@ where
         error!("Max retry reached, exiting");
     }
     
-    match c(&config)?.connect(None).await {
+    match c(config)?.connect(None).await {
         Ok(stream) => Ok(stream),
         Err(err) => {
             warn!(
