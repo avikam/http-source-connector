@@ -53,9 +53,7 @@ impl PingStream for WSPingOnlySink {
     }
 }
 
-async fn establish_connection(
-    request: WSRequest
-) -> Result<WebSocketStream<Transport>> {
+async fn establish_connection(request: WSRequest) -> Result<WebSocketStream<Transport>> {
     match connect_async(&request.url).await {
         Ok((mut ws_stream, _)) => {
             info!("WebSocket connected to {}", &request.url);
@@ -68,14 +66,14 @@ async fn establish_connection(
             error!("WebSocket connection error: {}", e);
             Err(anyhow::Error::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                e
+                e,
             )))
         }
     }
 }
 
 async fn websocket_writer_and_stream<'a>(
-    request: WSRequest
+    request: WSRequest,
 ) -> Result<(WSPingOnlySink, LocalBoxStream<'a, String>)> {
     let ws_stream = establish_connection(request)
         .await
@@ -128,7 +126,7 @@ async fn websocket_writer_and_stream<'a>(
 }
 
 impl WebSocketSource {
-    pub(crate) fn new(config: &HttpConfig) -> Result<Self> {        
+    pub(crate) fn new(config: &HttpConfig) -> Result<Self> {
         let ws_config = config.websocket_config.as_ref();
         Ok(Self {
             request: WSRequest {

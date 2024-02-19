@@ -14,7 +14,7 @@ use config::HttpConfig;
 use fluvio::{RecordKey, TopicProducer};
 use fluvio_connector_common::{
     connector,
-    tracing::{debug, info, trace, warn, error},
+    tracing::{debug, error, info, trace, warn},
     Source,
 };
 use futures::stream::LocalBoxStream;
@@ -46,7 +46,7 @@ async fn start(config: HttpConfig, producer: TopicProducer) -> Result<()> {
 
         let mut stream = match stream {
             Ok(stream) => stream,
-            Err(_) => continue
+            Err(_) => continue,
         };
 
         info!("Connected to source endpoint! Starting {SIGNATURES}");
@@ -66,18 +66,18 @@ async fn start(config: HttpConfig, producer: TopicProducer) -> Result<()> {
 async fn with_backoff<'a, F, C>(
     config: &HttpConfig,
     backoff: &mut Backoff,
-    c: F
-) -> Result<LocalBoxStream<'a, String>> 
+    c: F,
+) -> Result<LocalBoxStream<'a, String>>
 where
     F: FnOnce(&HttpConfig) -> Result<C>,
-    C: Source<'a, String>
+    C: Source<'a, String>,
 {
     let wait = backoff.next();
 
     if wait > BACKOFF_LIMIT {
         error!("Max retry reached, exiting");
     }
-    
+
     match c(config)?.connect(None).await {
         Ok(stream) => Ok(stream),
         Err(err) => {
